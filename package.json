@@ -1,0 +1,32 @@
+{
+  "name": "webllm-doc-chat",
+  "version": "0.1.0",
+  "description": "Chat with your documents locally using AI - Chrome Extension",
+  "scripts": {
+    "dev": "webpack --mode development --watch",
+    "build": "webpack --mode production",
+    "test": "jest",
+    "lint": "eslint src/ --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "clean": "rimraf dist",
+    "package": "npm run build && cd dist && powershell Compress-Archive -Path * -DestinationPath ../extension.zip -Force"
+  },
+  "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.46"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.246",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "copy-webpack-plugin": "^11.0.0",
+    "eslint": "^8.50.0",
+    "jest": "^29.6.0",
+    "rimraf": "^5.0.5",
+    "ts-jest": "^29.1.0",
+    "ts-loader": "^9.4.4",
+    "typescript": "^5.2.0",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.0"
+  }
+}
+

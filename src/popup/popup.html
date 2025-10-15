@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 400px;
+      height: 500px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      overflow: hidden;
+    }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      background: #fff;
+    }
+    
+    .header {
+      padding: 16px;
+      border-bottom: 1px solid #e0e0e0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .header h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .status {
+      font-size: 12px;
+      margin-top: 6px;
+      opacity: 0.9;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    
+    .status.loading .status-indicator {
+      background: #ffc107;
+      animation: pulse 1.5s infinite;
+    }
+    
+    .status.ready .status-indicator {
+      background: #4caf50;
+    }
+    
+    .status.error .status-indicator {
+      background: #f44336;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .chat-area {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      background: #f5f5f5;
+    }
+    
+    .chat-area::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .chat-area::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    
+    .chat-area::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 4px;
+    }
+    
+    .chat-area::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+    
+    .message {
+      margin-bottom: 12px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      max-width: 85%;
+      word-wrap: break-word;
+      line-height: 1.4;
+      font-size: 14px;
+    }
+    
+    .user-message {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      margin-left: auto;
+      border-bottom-right-radius: 4px;
+    }
+    
+    .assistant-message {
+      background: white;
+      color: #333;
+      border: 1px solid #e0e0e0;
+      border-bottom-left-radius: 4px;
+    }
+    
+    .input-area {
+      padding: 16px;
+      border-top: 1px solid #e0e0e0;
+      background: white;
+    }
+    
+    .input-wrapper {
+      display: flex;
+      gap: 8px;
+    }
+    
+    input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 20px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+    
+    input:focus {
+      border-color: #667eea;
+    }
+    
+    input:disabled {
+      background: #f5f5f5;
+      cursor: not-allowed;
+    }
+    
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: transform 0.2s, opacity 0.3s;
+    }
+    
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+    
+    button:active:not(:disabled) {
+      transform: translateY(0);
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .welcome-message {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+    
+    .welcome-message h4 {
+      margin-bottom: 8px;
+      color: #333;
+    }
+    
+    .loading-dots {
+      display: inline-block;
+    }
+    
+    .loading-dots::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+    
+    @keyframes dots {
+      0%, 20% { content: ''; }
+      40% { content: '.'; }
+      60% { content: '..'; }
+      80%, 100% { content: '...'; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h3>🤖 WebLLM Doc Chat</h3>
+      <div id="status" class="status loading">
+        <span class="status-indicator"></span>
+        <span id="statusText">Initializing<span class="loading-dots"></span></span>
+      </div>
+    </div>
+    
+    <div id="chatArea" class="chat-area">
+      <div class="message assistant-message">
+        <strong>👋 Hello!</strong><br><br>
+        I can help you understand this document. What would you like to know?
+      </div>
+    </div>
+    
+    <div class="input-area">
+      <div class="input-wrapper">
+        <input 
+          type="text" 
+          id="messageInput" 
+          placeholder="Ask about this document..." 
+          disabled
+        >
+        <button id="sendButton" disabled>Send</button>
+      </div>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
+

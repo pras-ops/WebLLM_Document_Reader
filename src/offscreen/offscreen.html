@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>WebLLM Offscreen Document</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    #status {
+      padding: 10px;
+      background: #2d2d30;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+    .log {
+      font-size: 12px;
+      padding: 5px;
+      border-left: 3px solid #007acc;
+      margin: 5px 0;
+      background: #252526;
+    }
+  </style>
+</head>
+<body>
+  <h2>WebLLM Offscreen Document</h2>
+  <div id="status">Initializing...</div>
+  <div id="logs"></div>
+  <script type="module" src="offscreen.js"></script>
+</body>
+</html>
+
