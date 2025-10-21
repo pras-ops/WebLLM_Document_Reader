@@ -12,7 +12,8 @@
     "package": "npm run build && cd dist && powershell Compress-Archive -Path * -DestinationPath ../extension.zip -Force"
   },
   "dependencies": {
-    "@mlc-ai/web-llm": "^0.2.46"
+    "@mlc-ai/web-llm": "^0.2.46",
+    "pdfjs-dist": "^5.4.296"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.246",
@@ -29,4 +30,3 @@
     "webpack-cli": "^5.1.0"
   }
 }
-

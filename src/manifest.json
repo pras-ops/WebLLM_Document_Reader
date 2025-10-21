@@ -8,7 +8,8 @@
     "activeTab",
     "scripting",
     "storage",
-    "offscreen"
+    "offscreen",
+    "file://*/*"
   ],
   
   "host_permissions": [
@@ -36,7 +37,7 @@
   
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["<all_urls>", "file://*/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
@@ -44,7 +45,7 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["offscreen.html"],
+      "resources": ["offscreen.html", "pdf.worker.min.js"],
       "matches": ["<all_urls>"]
     }
   ],

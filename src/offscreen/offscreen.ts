@@ -1,6 +1,6 @@
 import { CreateMLCEngine } from '@mlc-ai/web-llm';
 import type { MLCEngineInterface, ChatCompletionMessageParam } from '@mlc-ai/web-llm';
-import { ExtensionMessage, ChatMessage, ModelProgressMessage } from '../shared/types';
+import { ExtensionMessage, ChatMessage, ModelProgressMessage, PageTextMessage, DocumentReadyMessage } from '../shared/types';
 
 class OffscreenApp {
   private engine: MLCEngineInterface | null = null;
@@ -70,6 +70,21 @@ class OffscreenApp {
         case 'INIT_OFFSCREEN':
           // Offscreen is already initialized, just acknowledge
           this.log('Offscreen already initialized');
+          sendResponse({ success: true });
+          break;
+          
+        case 'PAGE_TEXT_EXTRACTED':
+          await this.handlePageTextExtracted(message as PageTextMessage, sendResponse);
+          break;
+          
+        case 'DOCUMENT_READY':
+          await this.handleDocumentReady(message as DocumentReadyMessage, sendResponse);
+          break;
+          
+        case 'MODEL_PROGRESS':
+        case 'CHAT_REPLY':
+          // These are broadcast messages, just acknowledge
+          this.log(`Received broadcast message: ${message.type}`);
           sendResponse({ success: true });
           break;
           
@@ -236,6 +251,39 @@ ${truncatedContext}
 USER QUESTION: ${question}
 
 Please provide a helpful answer based on the document content. If the document doesn't contain relevant information to answer the question, please say so politely.`;
+  }
+
+  private async handlePageTextExtracted(
+    message: PageTextMessage, 
+    sendResponse: (response?: any) => void
+  ): Promise<void> {
+    this.log(`Page text extracted: ${message.payload.text.length} characters from "${message.payload.title}"`);
+    
+    // Store the document context for future chat messages
+    try {
+      if (chrome && chrome.storage && chrome.storage.local) {
+        await chrome.storage.local.set({
+          currentDocument: message.payload
+        });
+        this.log(`Document stored: ${message.payload.title}`);
+      } else {
+        this.log('Chrome storage not available in offscreen context');
+      }
+    } catch (error) {
+      this.log(`Error storing document: ${(error as Error).message}`);
+    }
+    
+    sendResponse({ success: true });
+  }
+
+  private async handleDocumentReady(
+    message: DocumentReadyMessage, 
+    sendResponse: (response?: any) => void
+  ): Promise<void> {
+    this.log(`Document ready: ${message.payload.title}`);
+    
+    // Acknowledge that the document is ready
+    sendResponse({ success: true });
   }
 }
 

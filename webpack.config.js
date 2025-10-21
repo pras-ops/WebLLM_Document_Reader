@@ -32,6 +32,10 @@ module.exports = {
         { from: 'src/popup/popup.html', to: 'popup.html' },
         { from: 'src/offscreen/offscreen.html', to: 'offscreen.html' },
         { from: 'src/assets', to: 'assets' },
+        { 
+          from: 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs', 
+          to: 'pdf.worker.min.js' 
+        },
       ],
     }),
   ],

@@ -114,6 +114,12 @@ class BackgroundService {
     // Forward chat message to offscreen document
     try {
       const response = await chrome.runtime.sendMessage(message);
+      
+      // If we got a chat reply, broadcast it to the popup
+      if (response && response.type === 'CHAT_REPLY') {
+        await this.sendToPopup(response);
+      }
+      
       sendResponse(response);
     } catch (error) {
       console.error('Error forwarding chat message:', error);
@@ -137,6 +143,34 @@ class BackgroundService {
       console.log('Extension installed/updated:', details.reason);
       this.initializeStorage();
     });
+
+    // Listen for tab updates to inject content script into local PDFs
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.status === 'complete' && tab.url) {
+        this.handleTabUpdate(tabId, tab);
+      }
+    });
+  }
+
+  private async handleTabUpdate(tabId: number, tab: chrome.tabs.Tab): Promise<void> {
+    if (!tab.url) return;
+    
+    // Check if this is a local PDF file
+    if (tab.url.startsWith('file://') && tab.url.toLowerCase().includes('.pdf')) {
+      console.log('Detected local PDF:', tab.url);
+      
+      try {
+        // Try to inject content script manually
+        await chrome.scripting.executeScript({
+          target: { tabId: tabId },
+          files: ['content.js']
+        });
+        console.log('Content script injected into local PDF');
+      } catch (error) {
+        console.log('Could not inject content script:', error);
+        // This is expected if the extension doesn't have permission yet
+      }
+    }
   }
 
   private async initializeStorage(): Promise<void> {
