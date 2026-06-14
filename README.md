@@ -99,7 +99,33 @@ To run Tier 0:
 - `npm run test`: Executes unit tests for the chunker and RAG pipeline.
 - `npm run type-check`: Validates TypeScript typings.
 - `npm run lint`: Checks for linting violations.
-- `npm run package`: Generates a release bundle `extension.zip`.
+- `npm run clean`: Cleans up the `/dist` output directory to ensure a fresh compilation.
+- `npm run package`: Builds the project and packages it using the release script.
+
+---
+
+## 📦 Packaging & Release Pipeline
+
+The project includes an automated packaging pipeline to prepare the compiled Chrome Extension for distribution (e.g., uploading to the Chrome Web Store).
+
+### Extension Packager Script (`scripts/package-ext.js`)
+Instead of relying on OS-specific CLI compression utilities (which can fail across Windows, macOS, or Linux environments), the repository uses a custom Node.js script located at `scripts/package-ext.js`.
+
+#### How the Pipeline Works:
+1. **Webpack Compilation**: Triggered by running `npm run package`, Webpack compiles all TypeScript entry points (service worker, sidepanel, offscreen engine) and copies assets to the `/dist` folder.
+2. **Directory Scanning**: The packager script dynamically inspects the `/dist` directory to locate all build artifacts.
+3. **JSZip Compression**: Utilizing `jszip`, the script compresses all files and directories recursively.
+4. **Optimal Compression Level**: The script applies standard `DEFLATE` compression with level 9 (maximum compression) to ensure the extension size is minimized.
+5. **Output Archive**: A single production-ready `extension.zip` is created directly in the project root.
+
+To execute the packaging pipeline manually, run:
+```bash
+npm run package
+```
+This is shorthand for executing:
+```bash
+npm run build && node scripts/package-ext.js
+```
 
 ---
 
