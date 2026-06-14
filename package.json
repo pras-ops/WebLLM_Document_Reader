@@ -9,14 +9,23 @@
     "lint": "eslint src/ --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
     "clean": "rimraf dist",
-    "package": "npm run build && cd dist && powershell Compress-Archive -Path * -DestinationPath ../extension.zip -Force"
+    "package": "npm run build && node scripts/package-ext.js"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.0.0",
     "@mlc-ai/web-llm": "^0.2.46",
-    "pdfjs-dist": "^5.4.296"
+    "@wllama/wllama": "^2.4.0",
+    "dompurify": "^3.1.5",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.7.2",
+    "pdfjs-dist": "^5.4.296",
+    "tesseract.js": "^5.1.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.246",
+    "@types/dompurify": "^3.0.5",
+    "@types/jest": "^30.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "copy-webpack-plugin": "^11.0.0",

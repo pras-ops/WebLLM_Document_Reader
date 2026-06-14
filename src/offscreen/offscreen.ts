@@ -1,292 +1,315 @@
-import { CreateMLCEngine } from '@mlc-ai/web-llm';
-import type { MLCEngineInterface, ChatCompletionMessageParam } from '@mlc-ai/web-llm';
-import { ExtensionMessage, ChatMessage, ModelProgressMessage, PageTextMessage, DocumentReadyMessage } from '../shared/types';
+import { ExtensionMessage } from '../shared/types';
+import { ParserRegistry } from './parsers';
+import { RAGPipeline, VectorDB } from './rag';
+import { LLMEngine, ChromePromptEngine, WebGPUEngine, WasmEngine, probeEngineCapabilities } from './engine';
 
 class OffscreenApp {
-  private engine: MLCEngineInterface | null = null;
-  private isInitializing = false;
-  private statusElement: HTMLElement | null = null;
-  private logsElement: HTMLElement | null = null;
+  private port!: chrome.runtime.Port;
+  private currentEngine: LLMEngine | null = null;
+  private currentTier: 'builtin' | 'webgpu' | 'wasm' | null = null;
+  private isInitializingModel = false;
+  private idleTimer: any = null;
 
   constructor() {
-    this.statusElement = document.getElementById('status');
-    this.logsElement = document.getElementById('logs');
-    
-    this.log('Offscreen document loaded');
-    this.initializeMessageHandler();
+    this.initializePortConnection();
+    this.log('Offscreen coordinator loaded and ready.');
   }
 
-  private log(message: string): void {
-    console.log('[Offscreen]', message);
-    
-    if (this.logsElement) {
+  private log(msg: string): void {
+    console.log('[Offscreen]', msg);
+    const logsEl = document.getElementById('logs');
+    if (logsEl) {
       const logDiv = document.createElement('div');
       logDiv.className = 'log';
-      logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-      this.logsElement.appendChild(logDiv);
-      
-      // Keep only last 50 logs
-      while (this.logsElement.children.length > 50) {
-        this.logsElement.removeChild(this.logsElement.firstChild!);
+      logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logsEl.appendChild(logDiv);
+      while (logsEl.children.length > 50) {
+        logsEl.removeChild(logsEl.firstChild!);
       }
     }
-    
-    if (this.statusElement) {
-      this.statusElement.textContent = message;
+    const statusEl = document.getElementById('status');
+    if (statusEl) {
+      statusEl.textContent = msg;
     }
   }
 
-  private initializeMessageHandler(): void {
-    chrome.runtime.onMessage.addListener(
-      (message: ExtensionMessage, sender, sendResponse) => {
-        this.handleMessage(message, sendResponse).catch((error) => {
-          console.error('[Offscreen] Error handling message:', error);
-          sendResponse({ error: (error as Error).message });
+  private initializePortConnection(): void {
+    // Connect to the background script
+    this.port = chrome.runtime.connect({ name: 'offscreen' });
+    
+    this.port.onMessage.addListener((message: ExtensionMessage) => {
+      this.handleMessage(message).catch((err) => {
+        this.log(`Error handling message: ${err.message}`);
+        this.port.postMessage({
+          type: `${message.type}_REPLY`,
+          error: err.message
         });
-        return true; // Keep message channel open
-      }
-    );
-    
-    this.log('Message handler initialized');
+      });
+    });
   }
 
-  private async handleMessage(
-    message: ExtensionMessage, 
-    sendResponse: (response?: any) => void
-  ): Promise<void> {
-    this.log(`Received message: ${message.type}`);
-    
-    try {
-      switch (message.type) {
-        case 'CHAT_MESSAGE':
-          await this.handleChatMessage(message as ChatMessage, sendResponse);
-          break;
-          
-        case 'INIT_MODEL':
-          await this.initializeEngine();
-          sendResponse({ success: true });
-          break;
-          
-        case 'INIT_OFFSCREEN':
-          // Offscreen is already initialized, just acknowledge
-          this.log('Offscreen already initialized');
-          sendResponse({ success: true });
-          break;
-          
-        case 'PAGE_TEXT_EXTRACTED':
-          await this.handlePageTextExtracted(message as PageTextMessage, sendResponse);
-          break;
-          
-        case 'DOCUMENT_READY':
-          await this.handleDocumentReady(message as DocumentReadyMessage, sendResponse);
-          break;
-          
-        case 'MODEL_PROGRESS':
-        case 'CHAT_REPLY':
-          // These are broadcast messages, just acknowledge
-          this.log(`Received broadcast message: ${message.type}`);
-          sendResponse({ success: true });
-          break;
-          
-        default:
-          this.log(`Unknown message type: ${message.type}`);
-          sendResponse({ error: `Unknown message type: ${message.type}` });
+  private async handleMessage(message: ExtensionMessage): Promise<void> {
+    this.log(`Processing command: ${message.type}`);
+    this.resetIdleTimer();
+
+    switch (message.type) {
+      case 'PROBE_CAPABILITIES': {
+        const capabilities = await probeEngineCapabilities();
+        this.port.postMessage({
+          type: 'PROBE_CAPABILITIES_REPLY',
+          payload: { capabilities }
+        });
+        break;
       }
-    } catch (error) {
-      this.log(`Error: ${(error as Error).message}`);
-      sendResponse({ error: (error as Error).message });
-    }
-  }
 
-  private async initializeEngine(): Promise<void> {
-    if (this.engine) {
-      this.log('Engine already initialized');
-      return;
-    }
-    
-    if (this.isInitializing) {
-      this.log('Engine initialization already in progress');
-      return;
-    }
+      case 'INGEST_FILE': {
+        const { filename, arrayBuffer } = message.payload;
+        this.log(`Ingesting file: ${filename}`);
+        
+        // Step 1: Parse the file
+        const parsedDoc = await ParserRegistry.parseFile(filename, arrayBuffer, (progressMsg) => {
+          this.port.postMessage({
+            type: 'INGEST_PROGRESS',
+            payload: { message: progressMsg }
+          });
+        });
 
-    this.isInitializing = true;
-    this.log('Starting engine initialization...');
-    
-    try {
-      // Use a smaller model for faster loading
-      const model = 'Llama-3.2-3B-Instruct-q4f32_1-MLC';
-      this.log(`Loading model: ${model}`);
-      
-      // Try WebGPU first, then fall back to WASM
-      try {
-        this.log('Attempting to initialize with WebGPU...');
-        this.engine = await CreateMLCEngine(model, {
-          initProgressCallback: (report) => {
-            this.handleProgress(report);
+        // Step 2: Index with RAG
+        const storedDoc = await RAGPipeline.ingestDocument(parsedDoc, (progressMsg) => {
+          this.port.postMessage({
+            type: 'INGEST_PROGRESS',
+            payload: { message: progressMsg }
+          });
+        });
+
+        this.port.postMessage({
+          type: 'INGEST_COMPLETE',
+          payload: {
+            title: storedDoc.title,
+            chunkCount: storedDoc.chunks.length,
+            characterCount: storedDoc.text.length
           }
         });
-        this.log('✓ Using WebGPU backend (fast)');
-      } catch (webgpuError) {
-        this.log(`WebGPU not available: ${(webgpuError as Error).message}`);
-        this.log('Falling back to WASM backend (slower, but works on CPU)...');
+        break;
+      }
+
+      case 'CHAT_MESSAGE': {
+        const { documentTitle, message: query, engineTier } = message.payload;
+        this.log(`Received query for document "${documentTitle}" using engine "${engineTier}"`);
         
-        await this.sendProgress('WebGPU not available, using CPU fallback...', 0.1);
+        // Ensure engine is loaded and matches requested tier, falling back if needed
+        await this.ensureEngineWithFallback(engineTier);
+
+        // Retrieve top-k chunks
+        this.log('Searching relevant document context...');
+        const chunks = await RAGPipeline.retrieveRelevantChunks(documentTitle, query);
         
-        // Try WASM backend as fallback
-        this.engine = await CreateMLCEngine(model, {
-          initProgressCallback: (report) => {
-            this.handleProgress(report);
-          },
-          // Force WASM backend by not requesting WebGPU
-          // @ts-ignore - WebLLM will automatically use WASM if WebGPU fails
-          useWebGPU: false
+        if (chunks.length === 0) {
+          this.port.postMessage({
+            type: 'CHAT_REPLY',
+            payload: {
+              text: 'Could not find any relevant information in the document context.',
+              citations: []
+            }
+          });
+          return;
+        }
+
+        // Format system instructions + prompt
+        const prompt = this.buildPrompt(query, chunks);
+        this.log('Generating AI reply...');
+        
+        let accumulatedReply = '';
+        await this.currentEngine!.generate(prompt, (chunkText) => {
+          accumulatedReply += chunkText;
+          // Stream tokens to side panel
+          this.port.postMessage({
+            type: 'CHAT_CHUNK',
+            payload: { text: chunkText }
+          });
         });
-        this.log('✓ Using WASM backend (CPU-based, slower but compatible)');
+
+        // Map retrieved chunks to simplified citations
+        const citations = chunks.map((c) => ({
+          text: c.text,
+          pageNumber: c.pageNumber,
+          sheetName: c.sheetName
+        }));
+
+        this.port.postMessage({
+          type: 'CHAT_REPLY',
+          payload: {
+            text: accumulatedReply,
+            citations
+          }
+        });
+        break;
       }
 
-      await this.sendProgress('Model loaded successfully!', 1.0);
-      this.log('✓ WebLLM engine initialized successfully');
-      
-    } catch (error) {
-      const errorMsg = `Failed to initialize WebLLM: ${(error as Error).message}`;
-      this.log(`✗ ${errorMsg}`);
-      this.log('Please check:');
-      this.log('1. Chrome version >= 113');
-      this.log('2. At least 4GB RAM available');
-      this.log('3. Sufficient disk space (~4GB for model)');
-      await this.sendProgress(errorMsg, 0, true);
-      throw error;
-    } finally {
-      this.isInitializing = false;
-    }
-  }
-
-  private handleProgress(report: { progress: number; text: string; timeElapsed?: number }): void {
-    const stage = report.text || 'Loading...';
-    const progress = report.progress;
-    
-    this.log(`Progress: ${Math.round(progress * 100)}% - ${stage}`);
-    this.sendProgress(stage, progress, false);
-  }
-
-  private async sendProgress(stage: string, progress: number, isError: boolean = false): Promise<void> {
-    const message: ModelProgressMessage = {
-      type: 'MODEL_PROGRESS',
-      payload: {
-        progress: progress,
-        stage: stage,
-        timeElapsed: 0
+      case 'UNLOAD_ENGINE': {
+        await this.unloadEngine();
+        this.port.postMessage({
+          type: 'UNLOAD_ENGINE_REPLY',
+          payload: { success: true }
+        });
+        break;
       }
-    };
 
-    if (isError) {
-      (message as any).error = stage;
+      case 'LIST_DOCUMENTS': {
+        const docs = await VectorDB.listDocuments();
+        this.port.postMessage({
+          type: 'LIST_DOCUMENTS_REPLY',
+          payload: { documents: docs }
+        });
+        break;
+      }
+
+      case 'DELETE_DOCUMENT': {
+        const { title } = message.payload;
+        await VectorDB.deleteDocument(title);
+        this.port.postMessage({
+          type: 'DELETE_DOCUMENT_REPLY',
+          payload: { success: true }
+        });
+        break;
+      }
+
+      default:
+        this.log(`Warning: Unknown command type: ${message.type}`);
     }
 
-    try {
-      await chrome.runtime.sendMessage(message);
-    } catch (error) {
-      console.error('[Offscreen] Failed to send progress update:', error);
-    }
+    this.startIdleTimer();
   }
 
-  private async handleChatMessage(
-    message: ChatMessage, 
-    sendResponse: (response?: any) => void
-  ): Promise<void> {
-    if (!this.engine) {
-      this.log('Engine not initialized, initializing now...');
-      await this.initializeEngine();
-    }
-
-    if (!this.engine) {
-      const errorMsg = 'Model not initialized';
-      this.log(`✗ ${errorMsg}`);
-      sendResponse({ error: errorMsg });
+  private async ensureEngine(tier: 'builtin' | 'webgpu' | 'wasm'): Promise<void> {
+    if (this.currentEngine && this.currentTier === tier) {
       return;
     }
 
-    try {
-      this.log(`Processing chat message: "${message.payload.message.substring(0, 50)}..."`);
-      
-      const prompt = this.buildPrompt(message.payload.context, message.payload.message);
-      
-      this.log('Generating response...');
-      const response = await this.engine.chat.completions.create({
-        messages: [{ role: 'user', content: prompt }] as ChatCompletionMessageParam[],
-        stream: false,
-        max_tokens: 800,
-        temperature: 0.7
-      });
-
-      const reply = response.choices[0]?.message?.content || 'No response generated';
-      
-      this.log(`✓ Response generated (${reply.length} chars)`);
-      
-      sendResponse({
-        type: 'CHAT_REPLY',
-        payload: { text: reply }
-      });
-      
-    } catch (error) {
-      const errorMsg = `Chat error: ${(error as Error).message}`;
-      this.log(`✗ ${errorMsg}`);
-      sendResponse({ error: errorMsg });
-    }
-  }
-
-  private buildPrompt(context: string | undefined, question: string): string {
-    if (!context || context.length < 50) {
-      return `Please answer the following question:\n\n${question}`;
+    if (this.isInitializingModel) {
+      throw new Error('An engine is already initializing. Please wait.');
     }
 
-    // Limit context to avoid token limits
-    const truncatedContext = context.substring(0, 4000);
+    this.isInitializingModel = true;
+    this.log(`Transitioning engine from "${this.currentTier}" to "${tier}"...`);
 
-    return `You are a helpful AI assistant. Based on the following document content, please answer the user's question accurately and concisely.
-
-DOCUMENT CONTENT:
-${truncatedContext}
-
-USER QUESTION: ${question}
-
-Please provide a helpful answer based on the document content. If the document doesn't contain relevant information to answer the question, please say so politely.`;
-  }
-
-  private async handlePageTextExtracted(
-    message: PageTextMessage, 
-    sendResponse: (response?: any) => void
-  ): Promise<void> {
-    this.log(`Page text extracted: ${message.payload.text.length} characters from "${message.payload.title}"`);
-    
-    // Store the document context for future chat messages
     try {
-      if (chrome && chrome.storage && chrome.storage.local) {
-        await chrome.storage.local.set({
-          currentDocument: message.payload
-        });
-        this.log(`Document stored: ${message.payload.title}`);
-      } else {
-        this.log('Chrome storage not available in offscreen context');
+      if (this.currentEngine) {
+        this.log('Unloading previous engine...');
+        await this.currentEngine.unload();
+        this.currentEngine = null;
+        this.currentTier = null;
       }
-    } catch (error) {
-      this.log(`Error storing document: ${(error as Error).message}`);
+
+      let engine: LLMEngine;
+      switch (tier) {
+        case 'builtin':
+          engine = new ChromePromptEngine();
+          break;
+        case 'webgpu':
+          engine = new WebGPUEngine();
+          break;
+        case 'wasm':
+          engine = new WasmEngine();
+          break;
+        default:
+          throw new Error(`Invalid engine tier requested: ${tier}`);
+      }
+
+      await engine.init((status, progress) => {
+        this.port.postMessage({
+          type: 'INIT_PROGRESS',
+          payload: { status, progress }
+        });
+      });
+
+      this.currentEngine = engine;
+      this.currentTier = tier;
+      this.log(`Engine tier "${tier}" successfully initialized and active.`);
+    } catch (err) {
+      this.log(`Failed to initialize engine tier "${tier}": ${(err as Error).message}`);
+      throw err;
+    } finally {
+      this.isInitializingModel = false;
     }
-    
-    sendResponse({ success: true });
   }
 
-  private async handleDocumentReady(
-    message: DocumentReadyMessage, 
-    sendResponse: (response?: any) => void
-  ): Promise<void> {
-    this.log(`Document ready: ${message.payload.title}`);
+  private async ensureEngineWithFallback(requestedTier: 'builtin' | 'webgpu' | 'wasm'): Promise<void> {
+    const tiersOrder: Array<'builtin' | 'webgpu' | 'wasm'> = ['builtin', 'webgpu', 'wasm'];
+    const startIndex = tiersOrder.indexOf(requestedTier);
     
-    // Acknowledge that the document is ready
-    sendResponse({ success: true });
+    let lastError: Error | null = null;
+    
+    for (let i = startIndex; i < tiersOrder.length; i++) {
+      const tier = tiersOrder[i];
+      try {
+        await this.ensureEngine(tier);
+        
+        // If we fell back and successfully initialized a different engine tier, notify the sidepanel!
+        if (tier !== requestedTier) {
+          this.log(`Fallback triggered: fell back to "${tier}" because "${requestedTier}" failed.`);
+          this.port.postMessage({
+            type: 'ENGINE_FALLBACK',
+            payload: { originalTier: requestedTier, activeTier: tier }
+          });
+        }
+        return; // Success!
+      } catch (err) {
+        this.log(`Fallback check: engine tier "${tier}" failed to initialize: ${(err as Error).message}`);
+        lastError = err as Error;
+      }
+    }
+    
+    throw lastError || new Error(`Failed to initialize engine and all fallbacks.`);
+  }
+
+  private async unloadEngine(): Promise<void> {
+    if (this.currentEngine) {
+      this.log(`Unloading engine tier "${this.currentTier}" due to idle time.`);
+      await this.currentEngine.unload();
+      this.currentEngine = null;
+      this.currentTier = null;
+    }
+  }
+
+  private buildPrompt(query: string, chunks: any[]): string {
+    const contextText = chunks
+      .map((c, i) => {
+        let sourceTag = `[Source ${i + 1}]`;
+        if (c.pageNumber) sourceTag += ` (Page ${c.pageNumber})`;
+        if (c.sheetName) sourceTag += ` (Sheet ${c.sheetName})`;
+        return `${sourceTag}:\n${c.text}`;
+      })
+      .join('\n\n---\n\n');
+
+    return `You are a helpful local AI document reader assistant. Your task is to accurately and concisely answer the question using the provided context snippets from the document.
+Cite the source numbers (e.g. [Source 1], [Source 2]) directly in your answers where they support your statements.
+If the document content does not contain the answer, say so politely.
+
+CONTEXT SNIPPETS FROM DOCUMENT:
+${contextText}
+
+USER QUESTION:
+${query}
+
+Please output your answer, including citations:`;
+  }
+
+  private resetIdleTimer(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+  }
+
+  private startIdleTimer(): void {
+    this.resetIdleTimer();
+    // 5 minutes idle time limit
+    this.idleTimer = setTimeout(() => {
+      this.unloadEngine().catch(console.error);
+    }, 5 * 60 * 1000);
   }
 }
 
-// Initialize the offscreen application
+// Instantiate offscreen app
 new OffscreenApp();
-

@@ -1,64 +1,80 @@
-import { ExtensionMessage, PageTextMessage, ChatMessage } from '../shared/types';
+import { ExtensionMessage } from '../shared/types';
 
 class BackgroundService {
-  private offscreenDocument: any = null;
+  private activeSidepanelPort: chrome.runtime.Port | null = null;
+  private activeOffscreenPort: chrome.runtime.Port | null = null;
+  private messageQueue: any[] = [];
 
   constructor() {
-    this.initializeMessageHandlers();
     this.initializeLifecycleHandlers();
+    this.initializePortHandlers();
   }
 
-  private initializeMessageHandlers(): void {
-    chrome.runtime.onMessage.addListener(
-      (message: ExtensionMessage, sender, sendResponse) => {
-        this.handleMessage(message, sender, sendResponse).catch(console.error);
-        return true; // Keep message channel open for async response
+  private initializeLifecycleHandlers(): void {
+    chrome.runtime.onInstalled.addListener((details) => {
+      console.log('Extension installed/updated:', details.reason);
+      // Set panel behavior so clicking action icon opens the side panel
+      if (chrome.sidePanel && (chrome.sidePanel as any).setPanelBehavior) {
+        (chrome.sidePanel as any).setPanelBehavior({ openPanelOnActionClick: true })
+          .then(() => console.log('Successfully set openPanelOnActionClick'))
+          .catch((err: any) => console.error('Error setting panel behavior:', err));
       }
-    );
+      this.initializeStorage();
+    });
+
+    chrome.runtime.onStartup.addListener(() => {
+      console.log('Extension starting up...');
+      this.ensureOffscreenDocument().catch(console.error);
+    });
   }
 
-  private async handleMessage(
-    message: ExtensionMessage,
-    sender: chrome.runtime.MessageSender,
-    sendResponse: (response?: any) => void
-  ): Promise<void> {
-    try {
-      switch (message.type) {
-        case 'PAGE_TEXT_EXTRACTED':
-          await this.handlePageText(message as PageTextMessage);
-          sendResponse({ success: true });
-          break;
-          
-        case 'CHAT_MESSAGE':
-          await this.handleChatMessage(message as ChatMessage, sendResponse);
-          break;
-          
-        case 'INIT_OFFSCREEN':
-          await this.ensureOffscreenDocument();
-          sendResponse({ success: true });
-          break;
-          
-        case 'INIT_MODEL':
-          // Forward to offscreen document
-          await this.ensureOffscreenDocument();
-          sendResponse({ success: true });
-          break;
-          
-        case 'MODEL_PROGRESS':
-        case 'CHAT_REPLY':
-        case 'DOCUMENT_READY':
-          // These are broadcast messages, just acknowledge
-          sendResponse({ success: true });
-          break;
-          
-        default:
-          console.warn('Unknown message type:', message.type);
-          sendResponse({ error: 'Unknown message type' });
+  private initializePortHandlers(): void {
+    chrome.runtime.onConnect.addListener((port) => {
+      console.log(`Port connected: ${port.name}`);
+      
+      if (port.name === 'sidepanel') {
+        this.activeSidepanelPort = port;
+        
+        // Ensure offscreen document is running when sidepanel opens
+        this.ensureOffscreenDocument().catch(console.error);
+
+        port.onMessage.addListener((msg) => {
+          if (this.activeOffscreenPort) {
+            this.activeOffscreenPort.postMessage(msg);
+          } else {
+            console.log('Offscreen port not active, queueing message:', msg.type);
+            this.messageQueue.push(msg);
+          }
+        });
+
+        port.onDisconnect.addListener(() => {
+          console.log('Sidepanel port disconnected');
+          this.activeSidepanelPort = null;
+        });
+      } else if (port.name === 'offscreen') {
+        this.activeOffscreenPort = port;
+
+        // Flush queued messages
+        while (this.messageQueue.length > 0 && this.activeOffscreenPort) {
+          const queuedMsg = this.messageQueue.shift();
+          console.log('Flushing queued message to offscreen:', queuedMsg.type);
+          this.activeOffscreenPort.postMessage(queuedMsg);
+        }
+
+        port.onMessage.addListener((msg) => {
+          if (this.activeSidepanelPort) {
+            this.activeSidepanelPort.postMessage(msg);
+          } else {
+            console.warn('Sidepanel not connected to receive message:', msg.type);
+          }
+        });
+
+        port.onDisconnect.addListener(() => {
+          console.log('Offscreen port disconnected');
+          this.activeOffscreenPort = null;
+        });
       }
-    } catch (error) {
-      console.error('Error handling message:', error);
-      sendResponse({ error: (error as Error).message });
-    }
+    });
   }
 
   private async ensureOffscreenDocument(): Promise<void> {
@@ -66,14 +82,12 @@ class BackgroundService {
       return;
     }
 
-    this.offscreenDocument = {
-      url: chrome.runtime.getURL('offscreen.html'),
-      reasons: [chrome.offscreen.Reason.DOM_PARSER],
-      justification: 'Run WebLLM model and process documents'
-    };
-
     try {
-      await chrome.offscreen.createDocument(this.offscreenDocument);
+      await chrome.offscreen.createDocument({
+        url: chrome.runtime.getURL('offscreen.html'),
+        reasons: [chrome.offscreen.Reason.DOM_PARSER],
+        justification: 'Run WebLLM/Wllama engines and process local files'
+      });
       console.log('Offscreen document created successfully');
     } catch (error) {
       console.error('Failed to create offscreen document:', error);
@@ -82,7 +96,6 @@ class BackgroundService {
   }
 
   private async hasOffscreenDocument(): Promise<boolean> {
-    // Check if offscreen document exists using try/catch approach
     try {
       const existingContexts = await (chrome.runtime as any).getContexts?.({
         contextTypes: ['OFFSCREEN_DOCUMENT']
@@ -93,95 +106,13 @@ class BackgroundService {
     }
   }
 
-  private async handlePageText(message: PageTextMessage): Promise<void> {
-    // Store document context for later use
-    await chrome.storage.local.set({
-      currentDocument: message.payload
-    });
-    
-    console.log('Stored document:', message.payload.title);
-    
-    // Notify popup that we have document content
-    await this.sendToPopup({
-      type: 'DOCUMENT_READY',
-      payload: { title: message.payload.title }
-    });
-  }
-
-  private async handleChatMessage(message: ChatMessage, sendResponse: (response?: any) => void): Promise<void> {
-    await this.ensureOffscreenDocument();
-    
-    // Forward chat message to offscreen document
-    try {
-      const response = await chrome.runtime.sendMessage(message);
-      
-      // If we got a chat reply, broadcast it to the popup
-      if (response && response.type === 'CHAT_REPLY') {
-        await this.sendToPopup(response);
-      }
-      
-      sendResponse(response);
-    } catch (error) {
-      console.error('Error forwarding chat message:', error);
-      sendResponse({ error: (error as Error).message });
-    }
-  }
-
-  private async sendToPopup(message: ExtensionMessage): Promise<void> {
-    // This will be handled by popup when it's open
-    chrome.runtime.sendMessage(message).catch(() => {
-      // Popup is not open, which is fine
-    });
-  }
-
-  private initializeLifecycleHandlers(): void {
-    chrome.runtime.onStartup.addListener(() => {
-      console.log('Extension starting up...');
-    });
-
-    chrome.runtime.onInstalled.addListener((details) => {
-      console.log('Extension installed/updated:', details.reason);
-      this.initializeStorage();
-    });
-
-    // Listen for tab updates to inject content script into local PDFs
-    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-      if (changeInfo.status === 'complete' && tab.url) {
-        this.handleTabUpdate(tabId, tab);
-      }
-    });
-  }
-
-  private async handleTabUpdate(tabId: number, tab: chrome.tabs.Tab): Promise<void> {
-    if (!tab.url) return;
-    
-    // Check if this is a local PDF file
-    if (tab.url.startsWith('file://') && tab.url.toLowerCase().includes('.pdf')) {
-      console.log('Detected local PDF:', tab.url);
-      
-      try {
-        // Try to inject content script manually
-        await chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          files: ['content.js']
-        });
-        console.log('Content script injected into local PDF');
-      } catch (error) {
-        console.log('Could not inject content script:', error);
-        // This is expected if the extension doesn't have permission yet
-      }
-    }
-  }
-
   private async initializeStorage(): Promise<void> {
     const defaultState = {
       settings: {
-        modelSize: '3B',
         autoExtract: true,
         enableHistory: true
       },
-      chatSessions: [],
-      currentModel: 'Llama-3.2-3B-Instruct-q4f32_1-MLC'
+      chatSessions: []
     };
 
     await chrome.storage.local.set(defaultState);
@@ -189,7 +120,5 @@ class BackgroundService {
   }
 }
 
-// Initialize the background service
 new BackgroundService();
 console.log('Background service worker initialized');
-

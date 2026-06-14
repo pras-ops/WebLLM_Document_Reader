@@ -1,6 +1,6 @@
-# 🤖 WebLLM Document Chat Chrome Extension
+# 🤖 WebLLM Document Reader Chrome Extension
 
-A privacy-focused Chrome extension that enables **local, offline AI conversations** with web documents using WebLLM and WebGPU acceleration.
+A privacy-focused Chrome Extension that enables **local, offline AI conversations** with your documents. It works entirely within your browser, meaning your files and data never leave your device.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Version](https://img.shields.io/badge/version-0.1.0-green.svg)
@@ -8,378 +8,123 @@ A privacy-focused Chrome extension that enables **local, offline AI conversation
 
 ---
 
-## ✨ **Features**
+## ✨ Features
 
-- 🔒 **100% Private** - All processing happens locally in your browser
-- 🌐 **Offline Capable** - No internet required after initial model download
-- ⚡ **WebGPU Accelerated** - Hardware acceleration for fast inference
-- 📄 **Automatic Text Extraction** - Extracts content from web pages automatically
-- 💬 **AI-Powered Chat** - Ask questions about any document or webpage
-- 🎯 **No Cloud Dependencies** - Your data never leaves your device
-
----
-
-## 🎥 **Demo**
-
-> Chat with any webpage or document directly in your browser using local AI!
-
----
-
-## 📋 **Table of Contents**
-
-- [System Requirements](#system-requirements)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Performance](#performance)
-- [Project Structure](#project-structure)
-- [Development](#development)
-- [Troubleshooting](#troubleshooting)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
+- 🔒 **100% Private & Local**: Zero remote server calls. All parsing, chunking, vector storage, and AI inference happen locally.
+- 📁 **Local Files Only**: Operates strictly on documents you drag-and-drop or select inside the Side Panel UI. No background tracking or content scripts.
+- ⚡ **Multi-Tiered AI Architecture**:
+  - **Tier 0: Chrome Built-in AI (Gemini Nano)** - Runs directly via Chrome's experimental Prompt API. Zero download needed, ultra-fast.
+  - **Tier 1: Local GPU (WebGPU - Qwen 1.5B)** - WebGPU hardware acceleration for fast local responses.
+  - **Tier 2: Local CPU (WASM - SmolLM 360M)** - WebAssembly CPU fallback that runs on any standard device.
+- 📄 **Extensive Format Support**:
+  - **PDF**: Extracts text with page-level citations. Falls back to client-side OCR (Tesseract.js) for scanned documents.
+  - **Word (DOCX)**: Parses document paragraphs using Mammoth.
+  - **Excel (XLSX, XLS, CSV)**: Parses spreadsheets sheet-by-sheet using XLSX.
+  - **PowerPoint (PPTX)**: Custom pure-JS slide text extraction using JSZip.
+  - **EPUB**: Custom XML-based ebook sections extraction.
+  - **Images (PNG, JPG, JPEG, WEBP)**: Extracts text directly using client-side OCR.
+  - **Plain Text / Source Code**: Auto-detects and decodes UTF-8 text files (`.txt`, `.md`, `.json`, `.js`, `.ts`, `.html`, etc.).
+- 💬 **Interactive Chat Console**: Beautiful HSL color-themed chat panel with inline citations, message streaming, progress indicator, and citation source drawer.
+- 🔋 **Smart Resource Management**: Automatically unloads the model from GPU/CPU memory after 5 minutes of inactivity to prevent resource leaks.
 
 ---
 
-## 💻 **System Requirements**
-
-### **Minimum Requirements:**
-- **Browser**: Chrome/Edge 113+ (with WebGPU support)
-- **RAM**: 8GB (6GB+ free recommended)
-- **GPU**: Any GPU with WebGPU support (integrated or dedicated)
-- **Storage**: 2-4GB for model download
-
-### **Recommended for Best Performance:**
-- **RAM**: 16GB+
-- **GPU**: Dedicated GPU (NVIDIA GTX 1650+, AMD RX 5500+)
-- **Storage**: SSD for faster model loading
-
-### **Performance Expectations:**
-
-| Hardware Tier | Response Time | Tokens/Second |
-|---------------|---------------|---------------|
-| Minimum (Intel UHD, 8GB) | 1-3 minutes | 3-5 |
-| Recommended (GTX 1650, 16GB) | 10-30 seconds | 10-15 |
-| High-End (RTX 3060+, 32GB) | 5-15 seconds | 20-40 |
-| Enthusiast (RTX 4090) | 2-5 seconds | 50-100+ |
-
----
-
-## 🚀 **Installation**
-
-### **Prerequisites**
-
-1. **Enable WebGPU in Chrome:**
-   - Go to `chrome://flags`
-   - Search for "Unsafe WebGPU"
-   - Enable **#enable-unsafe-webgpu**
-   - Restart Chrome
-
-2. **Verify WebGPU is Working:**
-   - Visit `chrome://gpu`
-   - Check that "WebGPU" shows "Hardware accelerated"
-
-### **Install Extension**
-
-#### **Method 1: From Release (Recommended)**
-1. Download the latest release from [Releases](../../releases)
-2. Extract the ZIP file
-3. Open Chrome and go to `chrome://extensions`
-4. Enable "Developer mode" (top right)
-5. Click "Load unpacked"
-6. Select the extracted `dist` folder
-
-#### **Method 2: Build from Source**
-
-```bash
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/webllm-doc-chat.git
-cd webllm-doc-chat
-
-# Install dependencies
-npm install
-
-# Build the extension
-npm run build
-
-# Load the extension
-# 1. Go to chrome://extensions
-# 2. Enable "Developer mode"
-# 3. Click "Load unpacked"
-# 4. Select the 'dist' folder
-```
-
----
-
-## 📖 **Usage**
-
-### **First Time Setup**
-
-1. **Install the extension** (see above)
-2. **Navigate to any webpage**
-3. **Click the extension icon** in Chrome toolbar
-4. **Wait for model download** (1.7GB, takes 3-5 minutes on first use)
-   - Progress will be shown in the popup
-   - Model is cached for future use (30-60 sec load time after first use)
-
-### **Chatting with Documents**
-
-1. **Open any webpage** with text content
-2. **Click the extension icon**
-3. **Wait for "Model ready!"** status
-4. **Type your question** in the input field
-5. **Press Send** or hit Enter
-6. **Wait for AI response** (10 seconds to 3 minutes depending on hardware)
-
-### **Tips for Best Experience**
-
-- ✅ **Keep questions concise** - Shorter queries = faster responses
-- ✅ **Close other tabs** - Frees up RAM for better performance
-- ✅ **Wait for responses** - Don't send multiple messages while waiting
-- ✅ **Use simple language** - The model understands plain English best
-
----
-
-## ⚡ **Performance**
-
-### **First-Time Model Download**
-- **Size**: ~1.7GB (Llama-3.2-3B quantized model)
-- **Time**: 3-5 minutes (depending on internet speed)
-- **Storage**: Cached in browser for future use
-
-### **Subsequent Loads**
-- **Time**: 10-60 seconds (loads from cache)
-- **No internet required**
-
-### **Response Generation**
-- **Depends on**: GPU performance, available RAM, query complexity
-- **Typical**: 10 seconds to 2 minutes
-- **Streaming**: Not yet implemented (responses appear all at once)
-
----
-
-## 📁 **Project Structure**
-
-```
-webllm-doc-chat/
-├── src/
-│   ├── background/          # Service worker
-│   │   └── background.ts    # Background script (message routing)
-│   ├── content/             # Content scripts
-│   │   └── content.ts       # Page text extraction
-│   ├── popup/               # Extension popup UI
-│   │   ├── popup.html       # Popup interface
-│   │   └── popup.ts         # Popup logic
-│   ├── offscreen/           # Offscreen document
-│   │   ├── offscreen.html   # Offscreen page
-│   │   └── offscreen.ts     # WebLLM integration
-│   ├── shared/              # Shared utilities
-│   │   └── types.ts         # TypeScript types
-│   ├── assets/              # Icons and images
-│   └── manifest.json        # Extension manifest
-├── dist/                    # Built extension (generated)
-├── docs/                    # Documentation
-├── tests/                   # Test files (future)
-├── webpack.config.js        # Webpack configuration
-├── tsconfig.json            # TypeScript configuration
-├── package.json             # NPM dependencies
-└── README.md                # This file
-```
-
----
-
-## 🛠 **Development**
-
-### **Setup Development Environment**
-
-```bash
-# Install dependencies
-npm install
-
-# Start development build (watches for changes)
-npm run dev
-
-# Build for production
-npm run build
-
-# Type checking
-npm run type-check
-
-# Linting
-npm run lint
-
-# Clean build artifacts
-npm run clean
-```
-
-### **Testing the Extension**
-
-1. **Make changes** to source files
-2. **Build automatically updates** (if using `npm run dev`)
-3. **Reload extension** in Chrome:
-   - Go to `chrome://extensions`
-   - Click reload icon on the extension
-4. **Test your changes**
-
-### **Architecture Overview**
+## 🏗️ Architecture Overview
 
 ```mermaid
-graph LR
-    A[Web Page] --> B[Content Script]
-    B --> C[Background Service Worker]
-    C --> D[Offscreen Document]
-    D --> E[WebLLM Engine]
-    E --> F[WebGPU]
-    C --> G[Popup UI]
-    G --> C
+graph TD
+    User([User Drops File]) --> SP[Side Panel UI]
+    SP -- Ingest File / Chat --> BG[Background Service Worker]
+    BG -- Forward Command --> OS[Offscreen Document]
+    OS -- Run Inference --> HW{Capability Check}
+    HW -- Tier 0 --> Gemini[Gemini Nano via Prompt API]
+    HW -- Tier 1 --> WebGPU[Qwen 1.5B via WebLLM]
+    HW -- Tier 2 --> WASM[SmolLM 360M via Wllama ESM]
+    OS -- Ingest/OCR --> Parsers[Parsers Registry]
+    Parsers --> Chunker[Chunker & Vector DB]
 ```
 
-**Message Flow:**
-1. **Content Script** extracts page text → sends to Background
-2. **Background** stores context, routes messages
-3. **Popup** sends user query → Background → Offscreen
-4. **Offscreen** processes with WebLLM → sends response back
-5. **Popup** displays AI response to user
+### Component Details
+1. **Side Panel (`src/sidepanel/`)**: Handles UI, user inputs, and local settings storage (`preferredEngine`). Initiates connection ports and sends local files as ArrayBuffers to background script.
+2. **Background Service Worker (`src/background/background.ts`)**: Manages extension lifecycle, coordinates ports between Side Panel and Offscreen document, and guarantees that the offscreen document is spawned.
+3. **Offscreen Document (`src/offscreen/`)**: Operates in a DOM-capable sandbox off the UI thread. Hosts file parsers, indexing pipeline (RAG), vector DB, and the AI models.
 
 ---
 
-## 🐛 **Troubleshooting**
+## 💻 System Requirements
 
-### **WebGPU Not Available**
+Because the extension supports WASM CPU fallback, it runs on almost any machine, but experience depends on the backend engine:
 
-**Problem**: `Unable to find a compatible GPU`
-
-**Solutions**:
-1. Enable `chrome://flags/#enable-unsafe-webgpu`
-2. Check `chrome://gpu` - WebGPU should be "Available"
-3. Update Chrome to latest version
-4. Update GPU drivers
-5. **If on Windows**: Remove `--disable-gpu` from Chrome shortcuts
-
-### **Model Not Loading**
-
-**Problem**: Stuck at "Loading model..."
-
-**Solutions**:
-1. Check internet connection (first download only)
-2. Clear browser cache and reload extension
-3. Close other tabs to free RAM
-4. Check available disk space (need 2-4GB)
-
-### **Slow Responses**
-
-**Problem**: Responses take 3+ minutes
-
-**Solutions**:
-1. Close other Chrome tabs/apps
-2. Check RAM usage (should have 2GB+ free)
-3. Use shorter, simpler queries
-4. Consider hardware upgrade (more RAM, better GPU)
-
-### **No Response at All**
-
-**Problem**: Message sent but no response after 5+ minutes
-
-**Solutions**:
-1. Check console logs (offscreen.html inspect)
-2. Reload extension completely
-3. Restart Chrome
-4. Check if out of memory (Task Manager)
+| Engine | Hardware Requirements | Performance Expectation |
+|---|---|---|
+| **Chrome Built-in (Gemini Nano)** | Chrome 128+, Gemini Nano model downloaded | Instant streaming, 30-50 tokens/sec. Minimal battery drain. |
+| **WebGPU (Qwen 1.5B)** | Compatible GPU (Integrated/Discrete), 8GB+ RAM | 15-30 tokens/sec. Fast, good balance. |
+| **WASM (SmolLM 360M)** | Any standard dual-core CPU, 4GB+ RAM | 5-15 tokens/sec. Works on all legacy/low-end systems. |
 
 ---
 
-## 🗺 **Roadmap**
+## 🚀 Installation & Setup
 
-### **Phase 1: Foundation** ✅ COMPLETE
-- ✅ Extension skeleton with MV3
-- ✅ WebLLM integration
-- ✅ WebGPU setup
-- ✅ Content script text extraction
-- ✅ Basic chat functionality
+### Prerequisites for Chrome Built-in AI (Gemini Nano)
+To run Tier 0:
+1. Go to `chrome://flags` in Chrome.
+2. Search and enable **#optimization-guide-on-device-model** (set to "Enabled BypassPerfRequirement").
+3. Search and enable **#prompt-api-for-gemini-nano** (set to "Enabled").
+4. Restart Google Chrome.
+5. Visit `chrome://components` and check for "Optimization Guide On Device Model". Click "Check for update" to trigger download if version is `0.0.0.0`.
 
-### **Phase 2: Document Processing** 🚧 IN PROGRESS
-- [ ] PDF.js integration for PDF files
-- [ ] File System Access API for local files
-- [ ] Text chunking for large documents
-- [ ] Basic RAG implementation
+### Build from Source
+1. Clone this repository and enter it.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Build the extension:
+   ```bash
+   npm run build
+   ```
+   *Note: If you want to bundle it into a zip package for release, run `npm run package`.*
 
-### **Phase 3: Enhanced UX** 📋 PLANNED
-- [ ] Response streaming (show text as it generates)
-- [ ] Model management UI (switch models)
-- [ ] Chat history persistence (IndexedDB)
-- [ ] Loading indicators and progress bars
-- [ ] Error handling improvements
-
-### **Phase 4: Advanced Features** 💡 FUTURE
-- [ ] Multiple model support (1B, 3B, 7B)
-- [ ] Context window optimization
-- [ ] Export/import chat history
-- [ ] Custom prompts and templates
-- [ ] Performance analytics
-
-### **Phase 5: Production** 🎯 GOAL
-- [ ] Chrome Web Store submission
-- [ ] User documentation and tutorials
-- [ ] Performance benchmarks
-- [ ] Community feedback integration
+4. Load the unpacked extension:
+   - Open Chrome and navigate to `chrome://extensions`.
+   - Enable **Developer mode** in the top right corner.
+   - Click **Load unpacked** and select the `dist` directory inside the project root.
 
 ---
 
-## 🤝 **Contributing**
+## 🛠 Development Commands
 
-Contributions are welcome! Here's how you can help:
-
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Make your changes**
-4. **Test thoroughly**
-5. **Commit**: `git commit -m 'Add amazing feature'`
-6. **Push**: `git push origin feature/amazing-feature`
-7. **Open a Pull Request**
-
-### **Development Guidelines**
-- Follow existing code style
-- Add TypeScript types for new code
-- Test on multiple hardware configurations
-- Update documentation for new features
+- `npm run dev`: Watches code changes and builds incrementally in development mode.
+- `npm run build`: Compiles production build into `/dist`.
+- `npm run test`: Executes unit tests for the chunker and RAG pipeline.
+- `npm run type-check`: Validates TypeScript typings.
+- `npm run lint`: Checks for linting violations.
+- `npm run package`: Generates a release bundle `extension.zip`.
 
 ---
 
-## 📄 **License**
+## 📖 Troubleshooting Guide
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### Issue: Model loading is stuck or slow on first download
+- **Why**: WebGPU and WASM models (Qwen 1.5B is ~900MB; SmolLM 360M is ~240MB) must be downloaded to the browser cache on the first launch of that engine tier.
+- **Solution**: Keep the side panel open and wait for the download progress bar to reach 100%. Once downloaded, loading takes under 2 seconds.
 
----
+### Issue: "WebGPU is not supported" or "No compatible GPU adapter found"
+- **Why**: WebGPU may not be enabled or supported by your graphics drivers.
+- **Solution**:
+  - Visit `chrome://gpu` and check if "WebGPU" is listed as Hardware Accelerated.
+  - Enable `#enable-unsafe-webgpu` in `chrome://flags`.
+  - If your device does not support WebGPU, choose **WASM (SmolLM 360M)** in the Settings drawer (⚙️) to fallback to CPU-only execution.
 
-## 🙏 **Acknowledgments**
-
-- **[WebLLM](https://github.com/mlc-ai/web-llm)** - For making local LLM inference in browsers possible
-- **[MLC-AI](https://mlc.ai/)** - For the quantized models and runtime
-- **Chrome Extensions Team** - For Manifest V3 and WebGPU support
-- **Community Contributors** - Thank you for testing and feedback!
-
----
-
-## 📞 **Support**
-
-- **Issues**: [GitHub Issues](../../issues)
-- **Discussions**: [GitHub Discussions](../../discussions)
-- **Email**: your.email@example.com
-
----
-
-## 🌟 **Star History**
-
-If you find this project useful, please consider giving it a star! ⭐
+### Issue: Memory pressure or Chrome tab crashes
+- **Why**: Large documents combined with high context length can trigger Out-of-Memory (OOM) situations on machines with less than 8GB of RAM.
+- **Solution**:
+  - Close other active tabs/applications before using heavy models.
+  - Switch to **WASM (SmolLM 360M)** or **Chrome Built-in AI**, which have a much smaller memory footprint.
+  - The extension automatically unloads active models after 5 minutes of inactivity to free system memory.
 
 ---
 
-## 📊 **Project Stats**
+## 🤝 License
 
-![GitHub stars](https://img.shields.io/github/stars/YOUR_USERNAME/webllm-doc-chat?style=social)
-![GitHub forks](https://img.shields.io/github/forks/YOUR_USERNAME/webllm-doc-chat?style=social)
-![GitHub issues](https://img.shields.io/github/issues/YOUR_USERNAME/webllm-doc-chat)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/YOUR_USERNAME/webllm-doc-chat)
-
----
-
-**Made with ❤️ for privacy-conscious users**
+This project is licensed under the MIT License.

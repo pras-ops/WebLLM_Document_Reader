@@ -4,9 +4,8 @@ const path = require('path');
 module.exports = {
   entry: {
     background: './src/background/background.ts',
-    content: './src/content/content.ts',
-    popup: './src/popup/popup.ts',
     offscreen: './src/offscreen/offscreen.ts',
+    sidepanel: './src/sidepanel/sidepanel.ts',
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -29,7 +28,7 @@ module.exports = {
     new CopyPlugin({
       patterns: [
         { from: 'src/manifest.json', to: 'manifest.json' },
-        { from: 'src/popup/popup.html', to: 'popup.html' },
+        { from: 'src/sidepanel/sidepanel.html', to: 'sidepanel.html' },
         { from: 'src/offscreen/offscreen.html', to: 'offscreen.html' },
         { from: 'src/assets', to: 'assets' },
         { 
