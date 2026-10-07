@@ -1,5 +1,3 @@
-import { ExtensionMessage } from '../shared/types';
-
 class BackgroundService {
   private activeSidepanelPort: chrome.runtime.Port | null = null;
   private activeOffscreenPort: chrome.runtime.Port | null = null;

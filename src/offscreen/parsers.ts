@@ -3,7 +3,6 @@ import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { createWorker } from 'tesseract.js';
-import { TextChunk } from '../shared/types';
 
 // Configure PDFJS worker path
 pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdf.worker.min.js');

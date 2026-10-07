@@ -1,5 +1,5 @@
 import { env, pipeline } from '@huggingface/transformers';
-import { TextChunk, DocumentContext } from '../shared/types';
+import { TextChunk } from '../shared/types';
 import { ParsedDocument } from './parsers';
 import { chunkParsedDocument } from '../shared/chunker';
 

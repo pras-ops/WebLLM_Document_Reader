@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import { ExtensionMessage, Message, ChatSession } from '../shared/types';
+import { ExtensionMessage, Message } from '../shared/types';
 
 class SidepanelApp {
   private port!: chrome.runtime.Port;

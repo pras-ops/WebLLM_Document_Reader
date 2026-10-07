@@ -206,19 +206,20 @@ export class WasmEngine implements LLMEngine {
     // Format prompt simple style
     const formattedPrompt = `<|im_start|>user\n${prompt}<|im_end|>\n<|im_start|>assistant\n`;
     
-    let fullText = '';
+    // stream: true keeps a multi-byte character that is split across two tokens intact.
     const decoder = new TextDecoder('utf-8');
     const response = await this.wllama.createCompletion(formattedPrompt, {
       onNewToken: (token: number, piece: Uint8Array) => {
-        const textPiece = decoder.decode(piece);
-        fullText += textPiece;
-        onChunk(textPiece);
+        const textPiece = decoder.decode(piece, { stream: true });
+        if (textPiece) onChunk(textPiece);
       },
       sampling: {
         temp: 0.7,
       },
       nPredict: 800
     });
+    const rest = decoder.decode();
+    if (rest) onChunk(rest);
 
     return response;
   }
