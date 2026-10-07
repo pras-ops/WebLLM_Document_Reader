@@ -2,6 +2,7 @@
 
 A privacy-focused Chrome Extension that enables **local, offline AI conversations** with your documents. It works entirely within your browser, meaning your files and data never leave your device.
 
+[![CI](https://github.com/pras-ops/WebLLM_Document_Reader/actions/workflows/ci.yml/badge.svg)](https://github.com/pras-ops/WebLLM_Document_Reader/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Version](https://img.shields.io/badge/version-0.1.0-green.svg)
 ![Chrome](https://img.shields.io/badge/chrome-manifest%20v3-orange.svg)

@@ -251,7 +251,7 @@ class SidepanelApp {
         const { message: progressMsg } = message.payload;
         this.parsingStatusText.textContent = progressMsg;
         // Increment progress bar sequentially
-        let currentWidth = parseFloat(this.parsingProgressBar.style.width || '0');
+        const currentWidth = parseFloat(this.parsingProgressBar.style.width || '0');
         if (currentWidth < 90) {
           this.parsingProgressBar.style.width = `${currentWidth + 10}%`;
         }

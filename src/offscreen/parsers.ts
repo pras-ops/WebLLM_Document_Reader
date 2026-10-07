@@ -1,6 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import { createWorker } from 'tesseract.js';
 import { TextChunk } from '../shared/types';
 
@@ -190,7 +191,6 @@ export class ParserRegistry {
   private static async parsePPTX(filename: string, arrayBuffer: ArrayBuffer, onProgress?: (msg: string) => void): Promise<ParsedDocument> {
     onProgress?.('Extracting PPTX content...');
     // A simple, pure-JS XML slide text extractor using JSZip to avoid binary dependency issues
-    const JSZip = require('jszip');
     const zip = await JSZip.loadAsync(arrayBuffer);
     const slides: Array<{ text: string; slideNumber: number }> = [];
     let fullText = '';
@@ -241,7 +241,6 @@ export class ParserRegistry {
 
   private static async parseEPUB(filename: string, arrayBuffer: ArrayBuffer, onProgress?: (msg: string) => void): Promise<ParsedDocument> {
     onProgress?.('Parsing EPUB container...');
-    const JSZip = require('jszip');
     const zip = await JSZip.loadAsync(arrayBuffer);
     
     // Find opf file to locate chapters
